@@ -1,0 +1,5 @@
+﻿# filepath: D:\Project 1\realtime-semantic-analytics-stub\.gitignore
+__pycache__/
+*.pyc
+.venv/
+.env

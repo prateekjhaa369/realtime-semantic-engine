@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS - Threat Node Graph (Option C)</title>
+    <!-- Fonts & Libraries -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/force-graph"></script>
+    
+    <style>
+        /* BASE STYLES & VARIABLES (DEEP NETWORK THEME) */
+        :root {
+            --bg-color: #07071A; /* Deep purple/blue abyss */
+            --panel-bg: rgba(16, 16, 40, 0.6); /* Frosted dark purple */
+            --panel-border: rgba(123, 31, 162, 0.4); /* Purple UI outlines */
+            --primary-color: #E040FB; /* Neon Purple */
+            --cyan: #00E5FF; /* Cyan accents */
+            --text-main: #F3E5F5;
+            --text-muted: #B39DDB; 
+            --danger: #FF1744;
+            --success: #69F0AE;
+            --font: 'Space Grotesk', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at center, #0F0F29 0%, #04040D 100%);
+        }
+
+        /* HEADER */
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(4, 4, 13, 0.8);
+            border-bottom: 1px solid var(--panel-border);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        .logo { display: flex; align-items: center; gap: 1rem; }
+        .logo h1 {
+            font-size: 1.6rem; color: var(--text-main);
+            font-weight: 700; letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .logo span.highlight { color: var(--primary-color); text-shadow: 0 0 15px var(--primary-color); }
+
+        .pulse-ring {
+            width: 16px; height: 16px;
+            border: 2px solid var(--primary-color); border-radius: 50%;
+            animation: ring-pulse 2s infinite;
+        }
+
+        @keyframes ring-pulse { 
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+
+        .status-bar { display: flex; gap: 2.5rem; font-size: 0.95rem; font-weight: 600; font-family: 'Courier New', monospace;}
+        .status-item .label { color: var(--text-muted); }
+        .status-item .value { color: var(--cyan); }
+
+        /* DASHBOARD GRID */
+        .dashboard-grid {
+            flex: 1; display: grid;
+            grid-template-columns: 320px 1fr 320px;
+            grid-template-rows: auto 1fr;
+            gap: 1.5rem; padding: 1.5rem;
+            overflow: hidden;
+        }
+
+        /* SOFT GLASS PANELS */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex; flex-direction: column;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .panel-header {
+            font-size: 0.85rem; font-weight: 700; color: var(--primary-color);
+            letter-spacing: 2px; margin-bottom: 1rem; 
+            text-transform: uppercase;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* SEARCH BAR */
+        .search-panel { grid-column: 1 / -1; padding: 1rem 1.5rem; border-radius: 100px; }
+        .search-container { position: relative; display:flex; align-items:center; }
+        .search-container input {
+            width: 100%; padding: 0.5rem 1rem;
+            background: transparent; border: none;
+            color: var(--text-main); font-family: var(--font); font-size: 1.2rem;
+            outline: none;
+        }
+        .search-container input::placeholder { color: var(--text-muted); font-weight:300;}
+
+        /* LEFT: DEEP DIVE MODAL / ENTITY INSPECTOR */
+        .left-column { grid-column: 1 / 2; grid-row: 2 / 3; display: flex; flex-direction: column; gap: 1.5rem; }
+        
+        .inspector-panel { flex: 1; overflow: hidden; display:flex; flex-direction:column;}
+        .entity-card {
+            background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px; padding: 1rem; margin-bottom: 1rem;
+            transition: all 0.3s; cursor: pointer;
+        }
+        .entity-card:hover { border-color: var(--primary-color); background: rgba(224, 64, 251, 0.1); }
+        .entity-title { color: var(--cyan); font-weight: bold; margin-bottom: 0.5rem; font-size: 1.1rem;}
+        .entity-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.8rem; color: var(--text-muted);}
+        .entity-val { color: var(--text-main); font-family: monospace; }
+        
+        /* The Inspector Scan Line */
+        .scan-container {
+            position: relative; height: 100px; background: rgba(0,0,0,0.5); border-radius: 8px;
+            overflow: hidden; border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+        .scan-line {
+            position: absolute; top:0; left:0; width: 100%; height: 2px;
+            background: var(--cyan); box-shadow: 0 0 10px var(--cyan);
+            animation: scanning 2s linear infinite;
+        }
+        @keyframes scanning { 0% { top: 0; opacity:0;} 10% { opacity:1; } 90% {opacity:1;} 100% { top: 100%; opacity:0; } }
+        .scan-data { font-family: monospace; font-size: 0.7rem; color: var(--text-muted); padding: 5px;}
+
+        /* MIDDLE: THE NODE GRAPH */
+        .map-panel { grid-column: 2 / 3; grid-row: 2 / 3; padding: 0; overflow:hidden;}
+        .map-header { position: absolute; top: 1.5rem; left: 1.5rem; z-index: 2; border:none; background: rgba(16, 16, 40, 0.8); padding: 0.5rem 1rem; border-radius: 8px; backdrop-filter: blur(5px);}
+        .graph-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;}
+        
+        /* RIGHT: THREAT ALERTS & LOGS */
+        .right-column { grid-column: 3 / 4; grid-row: 2 / 3; display: flex; flex-direction: column; gap: 1.5rem; }
+        
+        .alert-stream { flex: 1; display: flex; flex-direction: column; gap: 0.8rem; overflow: hidden; }
+        .threat-alert {
+            background: linear-gradient(90deg, rgba(255, 23, 68, 0.2) 0%, transparent 100%);
+            border-left: 3px solid var(--danger);
+            padding: 1rem; border-radius: 0 8px 8px 0;
+            animation: slideLeft 0.3s ease-out;
+        }
+        @keyframes slideLeft { from { transform: translateX(20px); opacity:0;} to { transform: translateX(0); opacity:1;} }
+        
+        .alert-title { color: #ff8a80; font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; }
+        .alert-detail { font-size: 0.8rem; color: var(--text-muted); }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <div class="pulse-ring"></div>
+            <h1>NEXUS <span class="highlight">NODE</span></h1>
+        </div>
+        <div class="status-bar">
+            <div class="status-item"><span class="label">ACTIVE GRAPH:</span> <span class="value">GLOBAL_THREAT_V2</span></div>
+            <div class="status-item"><span class="label">EDGES:</span> <span class="value" id="edge-count">14,233</span></div>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- TOP: SEARCH / FILTER -->
+        <section class="panel search-panel">
+            <div class="search-container">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary-color); margin-right: 15px;">
+                    <circle cx="11" cy="11" r="8"></circle> <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="semantic-search" placeholder="Filter node clusters (e.g. 'Show dark pool crypto networks')">
+            </div>
+        </section>
+
+        <!-- LEFT: ENTITY INSPECTOR (Feature 4: Deep Dive) -->
+        <div class="left-column">
+            <section class="panel inspector-panel">
+                <div class="panel-header">NODE INSPECTOR</div>
+                
+                <div class="scan-container">
+                    <div class="scan-line"></div>
+                    <div class="scan-data" id="scan-data">
+                        WAITING FOR TARGET...<br>
+                        [SELECT A NODE ON THE GRAPH]
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; font-size: 0.8rem; color: var(--text-muted); margin-bottom:10px;">RECENT HIGH-RISK ENTITIES</div>
+                
+                <div class="entity-card">
+                    <div class="entity-title">NODE_0x7B9A (Wallet)</div>
+                    <div class="entity-stats">
+                        <div>Risk Score:</div><div class="entity-val" style="color:var(--danger)">0.94</div>
+                        <div>Connections:</div><div class="entity-val">12</div>
+                    </div>
+                </div>
+                
+                <div class="entity-card">
+                    <div class="entity-title">NODE_0x1A22 (IP Proxy)</div>
+                    <div class="entity-stats">
+                        <div>Risk Score:</div><div class="entity-val" style="color:var(--primary-color)">0.78</div>
+                        <div>Connections:</div><div class="entity-val">45</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- MIDDLE: THE FORCE-DIRECTED GRAPH -->
+        <section class="panel map-panel">
+             <div class="panel-header map-header">
+                VECTOR CLUSTERING <span style="font-size: 0.7rem; color: var(--text-muted); margin-left:10px;">[FORCE SIMULATION]</span>
+            </div>
+            <div id="graph-container" class="graph-container">
+                <!-- Force-Graph renders canvas here -->
+            </div>
+        </section>
+
+        <!-- RIGHT: LIVE THREAT ALERTS -->
+        <div class="right-column">
+             <section class="panel" style="flex: 1;">
+                <div class="panel-header">CLUSTER ACTIVITY</div>
+                <div class="alert-stream" id="alert-stream">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- SCRIPTS -->
+    <script>
+        // --- 1. FORCE-DIRECTED GRAPH LOGIC ---
+        let Graph;
+        
+        function initGraph() {
+            const container = document.getElementById('graph-container');
+            
+            // Generate heavily clustered data mimicking transaction networks
+            const N = 120; // Number of nodes
+            const nodes = Array.from({ length: N }, (_, id) => ({
+                id,
+                group: Math.random() > 0.85 ? 1 : 0, // 1=Threat, 0=Normal
+                val: Math.random() * 10 + 2 // Node size
+            }));
+
+            const links = [];
+            nodes.forEach(node => {
+                if (node.id === 0) return;
+                // Connect mostly to nodes in the same "cluster" range
+                const targetId = Math.floor(Math.random() * (node.id - 1));
+                links.push({ source: node.id, target: targetId });
+                
+                // Add random cross-cluster connections
+                if(Math.random() > 0.8) {
+                    links.push({ source: node.id, target: Math.floor(Math.random() * N) });
+                }
+            });
+
+            const gData = { nodes, links };
+
+            Graph = ForceGraph()(container)
+                .backgroundColor('rgba(0,0,0,0)')
+                .nodeRelSize(4)
+                .nodeColor(node => node.group === 1 ? '#FF1744' : '#00E5FF')
+                .linkColor(() => 'rgba(123, 31, 162, 0.4)')
+                .linkWidth(1.5)
+                .linkDirectionalParticles(2)
+                .linkDirectionalParticleSpeed(d => Math.random() * 0.01 + 0.005)
+                .graphData(gData)
+                .onNodeClick(node => {
+                    // Interaction: Deep Dive Scanner
+                    Graph.centerAt(node.x, node.y, 1000);
+                    Graph.zoom(4, 2000);
+                    simulateScan(node);
+                });
+
+            // Initial sizing fallback
+            setTimeout(() => {
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                if(w > 0) { Graph.width(w); Graph.height(h); }
+            }, 500);
+
+            window.addEventListener('resize', () => {
+                if(container.clientWidth > 0) {
+                    Graph.width(container.clientWidth);
+                    Graph.height(container.clientHeight);
+                }
+            });
+            
+            // Randomly flip a node to "Threat" mode to simulate live detection
+            setInterval(() => {
+                const { nodes, links } = Graph.graphData();
+                const randomNode = nodes[Math.floor(Math.random() * nodes.length)];
+                randomNode.group = 1;
+                randomNode.val += 5; // Make it pulse physically larger
+                Graph.graphData({ nodes, links }); // Trigger re-render
+                
+                addAlertLog(`Anomalous Vector Cluster Connected to Node_${randomNode.id}`);
+            }, 4000);
+        }
+
+        // --- 2. DEEP DIVE SCANNER LOGIC ---
+        function simulateScan(node) {
+            const scanner = document.getElementById('scan-data');
+            const hashes = [
+                'VEC:a7B29f...', 'VEC:19Xm4P...', 'VEC:0L4k9C...'
+            ];
+            
+            scanner.innerHTML = `
+                ANALYZING NODE_${node.id}...<br>
+                <span style="color:var(--primary-color)">[LOCK ACQUIRED]</span>
+            `;
+
+            let step = 0;
+            const scanInt = setInterval(() => {
+                if(step > 15) {
+                    clearInterval(scanInt);
+                    scanner.innerHTML += `<br><span style="color:${node.group === 1 ? 'var(--danger)' : 'var(--success)'}">ANALYSIS COMPLETE - RISK ${node.group === 1 ? 'HIGH' : 'LOW'}</span>`;
+                    return;
+                }
+                scanner.innerHTML += `<br>> checking vector ${hashes[Math.floor(Math.random()*3)]}`;
+                scanner.scrollTop = scanner.scrollHeight;
+                step++;
+            }, 100);
+        }
+
+        // --- 3. ALERTS & UI LOGIC ---
+        const alertStream = document.getElementById('alert-stream');
+        function addAlertLog(msg) {
+            const el = document.createElement('div');
+            el.className = 'threat-alert';
+            el.innerHTML = `
+                <div class="alert-title">EVENT CAPTURED</div>
+                <div class="alert-detail">${msg}</div>
+            `;
+            alertStream.prepend(el);
+            if(alertStream.children.length > 6) alertStream.removeChild(alertStream.lastChild);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initGraph();
+            
+            // Randomly update edge count for realism
+            setInterval(() => {
+                document.getElementById('edge-count').innerText = (14233 + Math.floor(Math.random() * 50)).toLocaleString();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

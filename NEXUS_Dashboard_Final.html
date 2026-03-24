@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS - Real-Time Semantic Intelligence</title>
+    <!-- Fonts & Libraries -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
+    
+    <style>
+        /* BASE STYLES & VARIABLES */
+        :root {
+            --bg-color: #02050A; /* Darker abyss background */
+            --panel-bg: rgba(2, 8, 15, 0.7); /* Frosted glass darker */
+            --panel-border: rgba(0, 191, 255, 0.15);
+            --primary-blue: #00BFFF;
+            --cyan: #00E5FF;
+            --text-main: #E0F7FA;
+            --text-muted: #80DEEA;
+            --danger: #FF1744;
+            --success: #00E676;
+            --font: 'Space Grotesk', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* GLOBE BACKGROUND (OPTION A) */
+        #globe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1; 
+            opacity: 0.5; /* Fade it slightly so panels pop */
+        }
+
+        /* HEADER */
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem;
+            background: rgba(2, 5, 10, 0.85); /* Dark solid bar at top */
+            border-bottom: 1px solid var(--panel-border);
+            z-index: 10;
+        }
+
+        .logo { display: flex; align-items: center; gap: 1rem; }
+        .logo h1 {
+            font-size: 1.5rem; color: var(--primary-blue);
+            text-shadow: 0 0 10px rgba(0, 191, 255, 0.5);
+            letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        .pulse-dot {
+            width: 12px; height: 12px;
+            background-color: var(--cyan); border-radius: 50%;
+            box-shadow: 0 0 10px var(--cyan);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
+        }
+
+        .status-bar { display: flex; gap: 2rem; font-size: 0.9rem; font-weight: 500;}
+        .status-item .label { color: var(--text-muted); }
+        .status-item .value { color: var(--cyan); font-weight: 600; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5); }
+        .status-item .value.success { color: var(--success); text-shadow: 0 0 5px rgba(0, 230, 118, 0.5); }
+
+        /* DASHBOARD LAYOUT */
+        .dashboard-grid {
+            flex: 1; display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 1.5rem; padding: 1.5rem;
+            overflow: hidden;
+            z-index: 1; /* Keep above globe */
+        }
+
+        /* PANELS (FROSTED GLASS) */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            backdrop-filter: blur(12px); /* Glass effect */
+            -webkit-backdrop-filter: blur(12px);
+            padding: 1.5rem;
+            display: flex; flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            position: relative; overflow: hidden;
+        }
+
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--primary-blue), transparent); opacity: 0.8;
+        }
+
+        .panel-header {
+            font-size: 0.9rem; font-weight: 600; color: var(--text-muted);
+            letter-spacing: 1px; margin-bottom: 1rem; 
+            border-bottom: 1px solid rgba(0, 191, 255, 0.1); padding-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        /* SEARCH BAR */
+        .search-panel { grid-column: 1 / -1; padding: 1rem 1.5rem; }
+        .search-container input {
+            width: 100%; padding: 1rem 1.5rem;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--primary-blue); border-radius: 6px;
+            color: var(--cyan); font-family: var(--font); font-size: 1.1rem;
+            outline: none; transition: box-shadow 0.3s ease;
+        }
+        .search-container input::placeholder { color: rgba(128, 222, 234, 0.4); }
+        .search-container input:focus { box-shadow: 0 0 20px rgba(0, 191, 255, 0.4); border-color: var(--cyan); }
+
+        /* RAW JSON LOG PANEL (THE COOL FACTOR) */
+        .raw-log-panel {
+            grid-column: 1 / 2; grid-row: 2 / 3;
+            font-family: 'Courier New', Courier, monospace; /* Hacker font */
+            font-size: 0.75rem; color: #00E676; /* Matrix green */
+            overflow: hidden;
+        }
+        .raw-log-container { display: flex; flex-direction: column; gap: 4px; mask-image: linear-gradient(to bottom, black 50%, transparent 100%); }
+        .json-line { opacity: 0.8; white-space: pre-wrap; word-break: break-all; }
+
+        /* LIVE EVENT STREAM (MIDDLE) */
+        .list-panel { grid-column: 2 / 3; grid-row: 2 / 3; background: rgba(2, 8, 15, 0.4); border:none;  backdrop-filter: blur(4px); pointer-events: none;}
+        .list-panel .panel-header { border-bottom: none; text-align: center; font-size: 1.2rem; margin-top:20px; color: rgba(255,255,255,0.8); text-shadow: 0 0 10px black;}
+        
+        .event-stream { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 0.8rem; align-items: center;}
+        
+        .event-item {
+            width: 80%;
+            background: rgba(0, 191, 255, 0.1);
+            border: 1px solid var(--primary-blue);
+            padding: 1rem; border-radius: 8px;
+            animation: slideUp 0.4s ease-out forwards;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .event-meta { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem; font-weight: bold;}
+        .event-desc { color: var(--text-main); font-size: 1.1rem; }
+        
+        .event-item.anomaly { 
+            border-color: var(--danger); background: rgba(255, 23, 68, 0.15); 
+            box-shadow: 0 0 15px rgba(255, 23, 68, 0.4);
+        }
+        .event-item.anomaly .event-desc { color: #ff8a80; font-weight: bold;}
+
+        /* METRICS & CHARTS (RIGHT SIDE) */
+        .right-column { grid-column: 3 / 4; grid-row: 2 / 3; display: flex; flex-direction: column; gap: 1.5rem; }
+        
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .metric-card {
+            background: rgba(0, 0, 0, 0.5); border: 1px solid var(--panel-border);
+            padding: 1rem; border-radius: 6px; text-align: center;
+        }
+        .metric-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; color: var(--cyan); text-shadow: 0 0 10px rgba(0, 229, 255, 0.4); }
+        .metric-card.warning { border-color: rgba(255, 23, 68, 0.5); }
+        .metric-card.warning .metric-value { color: var(--danger); text-shadow: 0 0 10px rgba(255, 23, 68, 0.4); }
+
+        .chart-container { flex: 1; position: relative; min-height: 200px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- THE MASSIVE BACKGROUND GLOBE -->
+    <div id="globe-container"></div>
+
+    <header>
+        <div class="logo">
+            <span class="pulse-dot"></span>
+            <h1>NEXUS // Semantic Engine</h1>
+        </div>
+        <div class="status-bar">
+            <div class="status-item"><span class="label">SYSTEM STATUS:</span> <span class="value success">OPTIMAL</span></div>
+            <div class="status-item"><span class="label">INGESTION RATE:</span> <span class="value" id="ingest-rate">3,421 ops/s</span></div>
+            <div class="status-item"><span class="label">VECTOR LATENCY:</span> <span class="value">4ms</span></div>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- TOP: SEARCH -->
+        <section class="panel search-panel">
+            <div class="search-container">
+                <input type="text" id="semantic-search" placeholder="Query semantic vectors (e.g., 'Show anomalous offshore wire transfers')...">
+            </div>
+        </section>
+
+        <!-- LEFT: RAW DATA STREAM (MATRIX STYLE) -->
+        <section class="panel raw-log-panel">
+            <div class="panel-header">RAW INGESTION FIREHOSE</div>
+            <div class="raw-log-container" id="raw-log-stream">
+                <!-- JSON lines populate here -->
+            </div>
+        </section>
+
+        <!-- MIDDLE: PARSED HIGH-LEVEL EVENTS -->
+        <section class="list-panel">
+            <div class="panel-header" style="letter-spacing: 4px;">LIVE VECTOR ACTIVITY</div>
+            <div class="event-stream" id="event-stream">
+                <!-- Alerts populate here -->
+            </div>
+        </section>
+
+        <!-- RIGHT: ANALYTICS -->
+        <div class="right-column">
+            <section class="panel">
+                <div class="panel-header">SYSTEM METRICS</div>
+                <div class="metrics-grid">
+                    <div class="metric-card"><div class="metric-label">EMBEDDINGS</div><div class="metric-value">4.2M</div></div>
+                    <div class="metric-card"><div class="metric-label">HOURLY VOL</div><div class="metric-value">$14.5M</div></div>
+                    <div class="metric-card warning"><div class="metric-label">CRITICAL THREATS</div><div class="metric-value" id="anomaly-metric">12</div></div>
+                    <div class="metric-card"><div class="metric-label">CACHE HIT</div><div class="metric-value">98.4%</div></div>
+                </div>
+            </section>
+
+            <section class="panel" style="flex: 1;">
+                <div class="panel-header">ANOMALY DETECTIONS</div>
+                <div class="chart-container">
+                    <canvas id="anomalyChart"></canvas>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- SCRIPTS -->
+    <script>
+        // --- 1. GLOBE LOGIC (BACKGROUND OPTION A) ---
+        function initBackgroundGlobe() {
+            const container = document.getElementById('globe-container');
+            
+            // We use standard images from unpkg directly, but since this file is entirely 
+            // standalone, it usually avoids CORS errors that split files cause.
+            const globe = Globe()(container)
+                .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-water.png')
+                .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+                .backgroundColor('rgba(0,0,0,0)')
+                .width(window.innerWidth)
+                .height(window.innerHeight)
+                .pointOfView({ lat: 20, lng: 0, altitude: 2 });
+
+            globe.controls().autoRotate = true;
+            globe.controls().autoRotateSpeed = 0.5;
+            globe.controls().enableZoom = false; // Prevent user from messing up the background
+
+            // Add shooting arcs
+            const generateArcs = () => {
+                const N = 15;
+                return [...Array(N).keys()].map(() => ({
+                    startLat: (Math.random() - 0.5) * 180,
+                    startLng: (Math.random() - 0.5) * 360,
+                    endLat: (Math.random() - 0.5) * 180,
+                    endLng: (Math.random() - 0.5) * 360,
+                    color: Math.random() > 0.8 ? '#FF1744' : '#00BFFF'
+                }));
+            };
+
+            globe.arcsData(generateArcs())
+                .arcColor('color')
+                .arcDashLength(0.4)
+                .arcDashGap(4)
+                .arcDashInitialGap(() => Math.random() * 5)
+                .arcDashAnimateTime(2000)
+                .arcStroke(1);
+
+            setInterval(() => globe.arcsData(generateArcs()), 4000);
+
+            window.addEventListener('resize', () => {
+                globe.width(window.innerWidth);
+                globe.height(window.innerHeight);
+            });
+        }
+
+        // --- 2. THE MATRIX RAW JSON STREAM ---
+        const logStream = document.getElementById('raw-log-stream');
+        function addRawLog() {
+            const ip = `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.1.1`;
+            const hash = Math.random().toString(36).substring(2, 15);
+            const amt = Math.floor(Math.random() * 50000);
+            const ts = Date.now();
+            
+            const logStr = `{"ts":${ts},"ip":"${ip}","vec":"${hash}","v":[0.1,0.4,0.2],"amt":${amt}}`;
+            
+            const el = document.createElement('div');
+            el.className = 'json-line';
+            el.innerText = `> ${logStr}`;
+            
+            logStream.prepend(el);
+            if(logStream.children.length > 25) logStream.removeChild(logStream.lastChild);
+        }
+
+        // --- 3. LIVE EVENT CARDS (MIDDLE) ---
+        const eventStream = document.getElementById('event-stream');
+        const locations = ["London, UK", "Tokyo, JP", "New York, US", "Frankfurt, DE", "Singapore, SG"];
+        const normalActions = ["Payroll Execution", "B2B Invoice Settled", "Logistics Payment", "Bond Purchase"];
+        const threatActions = ["Anomalous Offshore Wire", "Dark Pool Crypto Swap", "High-Frequency Flash Trade"];
+
+        let totalThreats = 12;
+
+        function addParsedEvent(isThreat = false) {
+            const el = document.createElement('div');
+            el.className = `event-item ${isThreat ? 'anomaly' : ''}`;
+            
+            const time = new Date().toISOString().split('T')[1].slice(0, 8);
+            const loc = locations[Math.floor(Math.random() * locations.length)];
+            const act = isThreat ? threatActions[Math.floor(Math.random() * threatActions.length)] : normalActions[Math.floor(Math.random() * normalActions.length)];
+            const amount = (Math.random() * (isThreat ? 900000 : 50000) + 1000).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+            const sim = isThreat ? (0.9 + Math.random()*0.09).toFixed(3) : (0.1 + Math.random()*0.5).toFixed(3);
+
+            el.innerHTML = `
+                <div class="event-meta">
+                    <span>${loc} 🕒 ${time}</span>
+                    <span>Vector Sim: ${sim}</span>
+                </div>
+                <div class="event-desc">${isThreat ? '⚠️ THREAT DETECTED: ' : ''}${act} - ${amount}</div>
+            `;
+
+            eventStream.prepend(el);
+            if(eventStream.children.length > 6) eventStream.removeChild(eventStream.lastChild);
+
+            if(isThreat) {
+                totalThreats++;
+                document.getElementById('anomaly-metric').innerText = totalThreats;
+            }
+        }
+
+        // --- 4. CHART.JS ---
+        function initChart() {
+            const ctx = document.getElementById('anomalyChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            gradient.addColorStop(0, 'rgba(0, 191, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(0, 191, 255, 0.0)');
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['10m', '8m', '6m', '4m', '2m', 'Now'],
+                    datasets: [{
+                        label: 'Threat Vector Score',
+                        data: [12, 19, 15, 65, 22, 45],
+                        borderColor: '#00BFFF',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#00E5FF'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: 0, max: 100 }
+                    }
+                }
+            });
+
+            setInterval(() => {
+                const data = chart.data.datasets[0].data;
+                data.shift();
+                data.push(Math.random() > 0.8 ? 60 + Math.random()*30 : 10 + Math.random()*20);
+                chart.update('none');
+            }, 3000);
+        }
+
+        // --- INIT ALL ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initBackgroundGlobe();
+            initChart();
+            
+            // Start the fast matrix stream
+            setInterval(addRawLog, 50);
+            
+            // Start the slower UI card stream
+            setInterval(() => addParsedEvent(false), 1500);
+            setInterval(() => addParsedEvent(true), 8000); // Rare threats
+
+            // Search Interaction
+            document.getElementById('semantic-search').addEventListener('keypress', function(e) {
+                if(e.key === 'Enter') {
+                    this.value = '';
+                    this.placeholder = 'Searching Pinecone Index...';
+                    setTimeout(() => {
+                        this.placeholder = 'Query semantic vectors (e.g., "Show anomalous offshore wire transfers")...';
+                        addParsedEvent(true); // Force an anomaly for effect
+                    }, 1000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
